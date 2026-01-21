@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import requests
+import ccxt
 import time
 from typing import Dict, List
 from datetime import datetime
@@ -17,7 +17,6 @@ os.makedirs("static", exist_ok=True)
 
 # Configuration
 SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "LINK", "AVAX"]
-BASE_URL = "https://api.binance.com/api/v3/klines"
 INTERVAL = "1d"
 LIMIT = 1000 # Extended to ~2.7 years
 
@@ -26,21 +25,22 @@ CACHE = {}
 CACHE_TTL = 60 # seconds
 
 def get_historical_data(symbol: str) -> List[Dict]:
-    """Fetches daily OHLCV data for the last year from Binance with caching."""
+    """Fetches daily OHLCV data for the last year from Binance using CCXT."""
     now = time.time()
     if symbol in CACHE:
         timestamp, data = CACHE[symbol]
         if now - timestamp < CACHE_TTL:
             return data
 
-    pair = f"{symbol}USDT"
-    params = {"symbol": pair, "interval": INTERVAL, "limit": LIMIT}
+    pair = f"{symbol}/USDT"
     try:
-        response = requests.get(BASE_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
+        # Fetch OHLCV: symbol, timeframe, since, limit
+        # limit=1000 is directly supported
+        ohlcv = exchange.fetch_ohlcv(pair, timeframe=INTERVAL, limit=LIMIT)
+        
         formatted_data = []
-        for candle in data:
+        for candle in ohlcv:
+            # candle structure: [timestamp, open, high, low, close, volume]
             formatted_data.append({
                 "timestamp": candle[0],
                 "date": datetime.fromtimestamp(candle[0] / 1000).strftime('%Y-%m-%d'),
