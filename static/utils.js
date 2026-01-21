@@ -191,9 +191,13 @@ function formatNumber(value) {
     return new Intl.NumberFormat('en-US').format(value);
 }
 
+// Aliases
+const formatMoney = formatCurrency;
+
 // Expose to window for App.js usage
 window.fetchHistoricalData = fetchHistoricalData;
 window.calculateAnalysis = calculateAnalysis;
 window.SYMBOLS = SYMBOLS;
 window.formatCurrency = formatCurrency;
+window.formatMoney = formatMoney; // FIX: Add missing alias
 window.formatNumber = formatNumber;
