@@ -357,6 +357,7 @@ def get_analysis(target_btc: float = None):
 
     return {
         "target_btc": target_btc,
+        "current_btc": current_btc,  # Expose current BTC price for frontend sync
         "match_count": len(matched_indices),
         "results": results,
         "history_matches": history_matches,

@@ -92,7 +92,7 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                     {filteredData.length === 0 && (
                         <tr>
                             <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                                找不到符合 "{searchTerm}" 的資產
+                                找不到符合 "{searchTerm}" 的資產 (或該目標價無歷史參照)
                             </td>
                         </tr>
                     )}
