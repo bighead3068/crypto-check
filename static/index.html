@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Undervaluation Detector</title>
+
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        bg: '#050505',
+                        surface: '#0a0a0a',
+                        glass: 'rgba(255, 255, 255, 0.03)',
+                        border: 'rgba(255, 255, 255, 0.08)',
+                        accent: '#00f2ff',
+                        success: '#22c55e',
+                        danger: '#ef4444',
+                        warning: '#eab308'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- TradingView Lightweight Charts -->
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+    <!-- External Styles -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body class="h-screen overflow-hidden flex">
+    <div id="root"></div>
+
+    <!-- External App Logic -->
+    <script type="text/babel" src="/static/utils.js"></script>
+    <script type="text/babel" src="/static/components/Icons.js"></script>
+    <script type="text/babel" src="/static/components/Sidebar.js"></script>
+    <script type="text/babel" src="/static/components/Heatmap.js"></script>
+    <script type="text/babel" src="/static/components/Dashboard.js"></script>
+    <script type="text/babel" src="/static/components/Backtest.js"></script>
+    <script type="text/babel" src="/static/components/Modal.js"></script>
+    <script type="text/babel" src="/static/app.js"></script>
+</body>
+
+</html>
