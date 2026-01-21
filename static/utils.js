@@ -162,7 +162,7 @@ function calculateAnalysis(marketData, targetBtc) {
             correlation: 0.85,
             rsi: Math.round(rsi),
             volume_ratio: 1.0,
-            sparkline: history.slice(0, 30).map(d => d.close).reverse()
+            sparkline: normalizedSparkline
         });
     });
 

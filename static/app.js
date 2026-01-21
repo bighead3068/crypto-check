@@ -12,6 +12,10 @@ function App() {
 
     useEffect(() => {
         fetchAnalysis();
+        const interval = setInterval(() => {
+            fetchAnalysis(null);
+        }, 15000); // 15 seconds auto-refresh
+        return () => clearInterval(interval);
     }, []);
 
     const fetchAnalysis = async (customTarget = null) => {
