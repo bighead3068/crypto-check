@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+import requests
 import ccxt
 import time
 from typing import Dict, List
@@ -24,23 +24,78 @@ LIMIT = 1000 # Extended to ~2.7 years
 CACHE = {}
 CACHE_TTL = 60 # seconds
 
+# Initialize Exchange
+exchange = ccxt.binance()
+
+def fetch_from_coincap(symbol: str) -> List[Dict]:
+    """Fallback: Fetches daily OHLCV data from CoinCap."""
+    # Map common symbols to CoinCap IDs
+    id_map = {
+        "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "BNB": "binance-coin",
+        "XRP": "xrp", "ADA": "cardano", "DOGE": "dogecoin", "DOT": "polkadot",
+        "LINK": "chainlink", "AVAX": "avalanche"
+    }
+    
+    asset_id = id_map.get(symbol)
+    if not asset_id:
+        print(f"No CoinCap ID found for {symbol}")
+        return []
+        
+    url = f"https://api.coincap.io/v2/assets/{asset_id}/history"
+    params = {"interval": "d1"} # daily
+    
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()["data"]
+        
+        formatted_data = []
+        for candle in data:
+            # CoinCap returns time in ms
+            ts = int(candle["time"])
+            date_str = datetime.fromtimestamp(ts / 1000).strftime('%Y-%m-%d')
+            
+            # CoinCap history doesn't give Open/High/Low reliably in this endpoint, 
+            # usually just 'priceUsd'. But for our correlation purpose, Close is most important.
+            # We will approximate OHL as Close if missing, or use priceUsd as Close.
+            price = float(candle["priceUsd"])
+            
+            formatted_data.append({
+                "timestamp": ts,
+                "date": date_str,
+                "open": price, # Approximation
+                "high": price, # Approximation
+                "low": price,  # Approximation
+                "close": price,
+                "volume": 0    # Not always available in this endpoint
+            })
+            
+        # Reverse to match Binance order (newest first)? 
+        # API usually returns oldest first. Our app expects newest first for some logic? 
+        # Let's check get_historical_data usage.
+        # Original code didn't explicitly sort, Binance returns oldest first. 
+        # App seems to handle list order, but let's stick to oldest -> newest (standard).
+        
+        return formatted_data
+    except Exception as e:
+        print(f"CoinCap Error {symbol}: {e}")
+        return []
+
 def get_historical_data(symbol: str) -> List[Dict]:
-    """Fetches daily OHLCV data for the last year from Binance using CCXT."""
+    """Fetches daily OHLCV data with fallback to CoinCap."""
     now = time.time()
     if symbol in CACHE:
         timestamp, data = CACHE[symbol]
         if now - timestamp < CACHE_TTL:
             return data
 
-    pair = f"{symbol}/USDT"
+    # Try Binance (CCXT)
     try:
-        # Fetch OHLCV: symbol, timeframe, since, limit
-        # limit=1000 is directly supported
+        pair = f"{symbol}/USDT"
         ohlcv = exchange.fetch_ohlcv(pair, timeframe=INTERVAL, limit=LIMIT)
         
         formatted_data = []
         for candle in ohlcv:
-            # candle structure: [timestamp, open, high, low, close, volume]
             formatted_data.append({
                 "timestamp": candle[0],
                 "date": datetime.fromtimestamp(candle[0] / 1000).strftime('%Y-%m-%d'),
@@ -50,12 +105,17 @@ def get_historical_data(symbol: str) -> List[Dict]:
                 "close": float(candle[4]),
                 "volume": float(candle[5])
             })
-        
-        # Update Cache
+            
         CACHE[symbol] = (now, formatted_data)
         return formatted_data
+        
     except Exception as e:
-        print(f"Error fetching {symbol}: {e}")
+        print(f"Binance (CCXT) failed for {symbol}: {e}. Trying CoinCap...")
+        # Fallback to CoinCap
+        data = fetch_from_coincap(symbol)
+        if data:
+            CACHE[symbol] = (now, data)
+            return data
         return []
 
 @app.get("/api/history/{symbol}")
