@@ -150,6 +150,16 @@ function calculateAnalysis(marketData, targetBtc) {
         if (diffPercent < -10) status = "Undervalued";
         else if (diffPercent > 10) status = "Overvalued";
 
+        const recentHistory = history.slice(0, 30).map(d => d.close).reverse();
+        const minPrice = Math.min(...recentHistory);
+        const maxPrice = Math.max(...recentHistory);
+        const range = maxPrice - minPrice;
+
+        // Normalize to 0.2 - 1.0 range (keep some baseline)
+        const normalizedSparkline = recentHistory.map(p =>
+            range === 0 ? 0.5 : 0.2 + ((p - minPrice) / range) * 0.8
+        );
+
         results.push({
             symbol: sym,
             current_price: currentPrice,
