@@ -22,7 +22,7 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
                     <IconLayoutDashboard /> 市場熱力圖 (Market Heatmap)
                 </h3>
-                <Heatmap data={data.results} />
+                <Heatmap data={data} />
             </div>
 
             {/* Asset List */}
@@ -87,18 +87,18 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                         <td className="px-6 py-4 text-gray-400">{window.formatMoney(asset.avg_hist_price)}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-1 rounded-md font-medium ${asset.diff_percent < 0
-                                                    ? 'bg-cyan-500/10 text-cyan-400'
-                                                    : 'bg-red-500/10 text-red-400'
+                                                ? 'bg-cyan-500/10 text-cyan-400'
+                                                : 'bg-red-500/10 text-red-400'
                                                 }`}>
                                                 {asset.diff_percent > 0 ? '+' : ''}{asset.diff_percent.toFixed(2)}%
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${asset.status === 'Undervalued'
-                                                    ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'
-                                                    : asset.status === 'Overvalued'
-                                                        ? 'bg-red-500/10 border-red-500/20 text-red-400'
-                                                        : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
+                                                ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'
+                                                : asset.status === 'Overvalued'
+                                                    ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                                                    : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
                                                 }`}>
                                                 {asset.status === 'Undervalued' && <IconTrendingUp />}
                                                 {asset.status === 'Overvalued' && <IconAlertTriangle />}
