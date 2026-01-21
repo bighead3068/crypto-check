@@ -12,6 +12,8 @@ import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 
+app = FastAPI()
+
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 # Ensure static directory exists
@@ -573,3 +575,6 @@ def get_analysis(target_btc: float = None):
 @app.get("/")
 async def serve_index():
     return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
