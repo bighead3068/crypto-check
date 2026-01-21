@@ -194,44 +194,87 @@ def generate_market_briefing(results: List[Dict], btc_price: float) -> Dict:
     }
 
 def generate_mock_data(target_btc=95000):
-    """Generates mock data when all APIs fail."""
+    """Generates realistic mock data when all APIs fail."""
     mock_results = []
     import random
+    
+    # Generate mock BTC data first
+    current_btc = target_btc * random.uniform(0.98, 1.02)
+    
     for sym in SYMBOLS:
+        # Generate random price movement (Sparkline) - Random Walk
+        sparkline = []
+        price_point = 0.5
+        for _ in range(20):
+            change = random.uniform(-0.1, 0.1)
+            price_point = max(0.1, min(0.9, price_point + change))
+            sparkline.append(price_point)
+            
         if sym == "BTC":
             mock_results.append({
                 "symbol": "BTC",
-                "current_price": target_btc, "avg_hist_price": target_btc,
-                "diff_percent": 0, "status": "Benchmark", "sniper_score": 50,
-                "win_rate": 50, "potential_upside": 0, "correlation": 1.0, "rsi": 50, "volume_ratio": 1.0, "sparkline": []
+                "current_price": current_btc, 
+                "avg_hist_price": current_btc,
+                "diff_percent": 0.0, 
+                "status": "Benchmark", 
+                "sniper_score": 50,
+                "win_rate": 50, 
+                "potential_upside": 0, 
+                "correlation": 1.0, 
+                "rsi": random.choice([45, 50, 55]), 
+                "volume_ratio": 1.0, 
+                "sparkline": sparkline
             })
             continue
             
-        price = target_btc * (0.05 if sym != "ETH" else 0.08)
+        # Randomize Diff
+        diff_percent = random.uniform(-25, 25)
+        
+        # Calculate Mock Prices derived from diff
+        # diff = (current - avg) / avg  => current = avg * (1 + diff)
+        # Let's say avg is correlated to BTC mock price * ratio
+        base_ratio = {
+            "ETH": 0.05, "SOL": 0.002, "BNB": 0.006, "XRP": 0.00001, 
+            "ADA": 0.000005, "DOGE": 0.000001, "DOT": 0.00008, 
+            "LINK": 0.00015, "AVAX": 0.0003
+        }.get(sym, 0.01)
+        
+        avg_hist_price = current_btc * base_ratio
+        current_price = avg_hist_price * (1 + (diff_percent / 100))
+        
+        # Determine Status
+        status = "Balanced"
+        if diff_percent < -10: status = "Undervalued"
+        elif diff_percent > 10: status = "Overvalued"
+        
+        # Sniper Score
+        sniper_score = random.randint(30, 95)
+        if status == "Undervalued": sniper_score = min(100, sniper_score + 20)
+        
         mock_results.append({
             "symbol": sym, 
-            "current_price": price, 
-            "avg_hist_price": price * 0.9, 
-            "diff_percent": 10.0, 
-            "status": "Undervalued",
-            "sniper_score": 75,
-            "win_rate": 60, 
-            "potential_upside": 15, 
-            "correlation": 0.85, 
-            "rsi": 45, 
-            "volume_ratio": 1.2,
-            "sparkline": [0.5, 0.6, 0.4, 0.7, 0.5, 0.8, 0.9]
+            "current_price": current_price, 
+            "avg_hist_price": avg_hist_price, 
+            "diff_percent": diff_percent, 
+            "status": status,
+            "sniper_score": sniper_score,
+            "win_rate": random.randint(40, 80), 
+            "potential_upside": abs(diff_percent) if diff_percent < 0 else 0, 
+            "correlation": random.uniform(0.7, 0.99), 
+            "rsi": random.randint(30, 70), 
+            "volume_ratio": random.uniform(0.8, 2.5),
+            "sparkline": sparkline
         })
     
     return {
         "target_btc": target_btc,
-        "current_btc": target_btc,
+        "current_btc": current_btc,
         "match_count": 0,
         "results": sorted(mock_results, key=lambda x: x["sniper_score"], reverse=True),
         "history_matches": [],
         "briefing": {
-            "title": "⚠️ 系統離線模式 (Offline)",
-            "summary": "無法連接到外部數據源 (Binance/CoinCap)，目前顯示模擬數據。這可能是因為雲端 IP 被封鎖。",
+            "title": "⚠️ 系統離線模式 (Simulated Data)",
+            "summary": "數據源連接失敗 (IP blocked)。下表顯示的是基於目標價生成的「模擬情境」，僅供測試與介面預覽，非真實市場報價。",
             "timestamp": datetime.now().strftime("%H:%M")
         }
     }
