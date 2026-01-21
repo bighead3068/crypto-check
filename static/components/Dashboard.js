@@ -1,4 +1,4 @@
-const Dashboard = ({ data, setSelectedAsset }) => {
+const Dashboard = ({ data, setSelectedAsset, timeframe, setTimeframe }) => {
     const [searchTerm, setSearchTerm] = React.useState("");
     const [filterStatus, setFilterStatus] = React.useState("all");
 
@@ -14,22 +14,41 @@ const Dashboard = ({ data, setSelectedAsset }) => {
 
     return (
         <div className="space-y-6">
-            {/* Market Heatmap */}
+            {/* Market Heatmap & Timeframe */}
             <div className="glass-panel p-6 rounded-2xl relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-50">
+                <div className="flex justify-between items-start mb-4">
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                        <IconLayoutDashboard /> 市場熱力圖 (Combined Analysis)
+                    </h3>
+
+                    {/* Timeframe Selector */}
+                    <div className="flex bg-black/40 rounded-lg p-1 border border-white/10">
+                        {['4h', '1d', '1w'].map((tf) => (
+                            <button
+                                key={tf}
+                                onClick={() => setTimeframe(tf)}
+                                className={`px-4 py-1.5 rounded-md text-sm font-bold transition-all ${timeframe === tf
+                                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-900/40'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/10'
+                                    }`}
+                            >
+                                {tf.toUpperCase()}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="absolute top-0 right-0 p-4 opacity-50 pointer-events-none">
                     <IconActivity />
                 </div>
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                    <IconLayoutDashboard /> 市場熱力圖 (Market Heatmap)
-                </h3>
-                <Heatmap data={data} />
+                <Heatmap data={data} setSelectedAsset={setSelectedAsset} />
             </div>
 
             {/* Asset List */}
             <div className="glass-panel rounded-2xl overflow-hidden">
                 <div className="p-6 border-b border-white/5 flex flex-col md:flex-row justify-between items-center gap-4">
                     <h3 className="text-xl font-bold flex items-center gap-2">
-                        <IconSearch /> 資產分析列表
+                        <IconSearch /> 資產分析列表 (TradingView Data)
                     </h3>
 
                     <div className="flex gap-4 w-full md:w-auto">
@@ -63,12 +82,13 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                         <thead>
                             <tr className="text-left text-gray-400 text-sm bg-white/5">
                                 <th className="px-6 py-4 font-medium">資產</th>
-                                <th className="px-6 py-4 font-medium">當前價格</th>
-                                <th className="px-6 py-4 font-medium">目標均價 (Model)</th>
-                                <th className="px-6 py-4 font-medium">偏差 (Diff)</th>
+                                <th className="px-6 py-4 font-medium">價格</th>
+                                <th className="px-6 py-4 font-medium">目標均價</th>
+                                <th className="px-6 py-4 font-medium">偏差 %</th>
+                                <th className="px-6 py-4 font-medium">RSI (14)</th>
+                                <th className="px-6 py-4 font-medium">MACD</th>
                                 <th className="px-6 py-4 font-medium">狀態</th>
-                                <th className="px-6 py-4 font-medium">7日走勢</th>
-                                <th className="px-6 py-4 font-medium">操作</th>
+                                <th className="px-6 py-4 font-medium">趨勢</th>
                             </tr>
                         </thead>
                         <tbody className="text-sm divide-y divide-white/5">
@@ -83,8 +103,8 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                             <span className={`w-2 h-2 rounded-full ${asset.status === 'Undervalued' ? 'bg-cyan-400' : 'bg-gray-500'}`}></span>
                                             {asset.symbol}
                                         </td>
-                                        <td className="px-6 py-4">{window.formatMoney(asset.current_price)}</td>
-                                        <td className="px-6 py-4 text-gray-400">{window.formatMoney(asset.avg_hist_price)}</td>
+                                        <td className="px-6 py-4 font-mono">{window.formatMoney(asset.current_price)}</td>
+                                        <td className="px-6 py-4 text-gray-400 font-mono">{window.formatMoney(asset.avg_hist_price)}</td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-1 rounded-md font-medium ${asset.diff_percent < 0
                                                 ? 'bg-cyan-500/10 text-cyan-400'
@@ -92,6 +112,21 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                                 }`}>
                                                 {asset.diff_percent > 0 ? '+' : ''}{asset.diff_percent.toFixed(2)}%
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`font-mono ${asset.rsi < 30 ? 'text-green-400 font-bold' : asset.rsi > 70 ? 'text-red-400 font-bold' : 'text-gray-400'}`}>
+                                                {asset.rsi}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-xs">
+                                            <div className="flex flex-col">
+                                                <span className={asset.macd.macd > asset.macd.signal ? 'text-green-400' : 'text-red-400'}>
+                                                    {asset.macd.histogram > 0 ? '+' : ''}{asset.macd.histogram.toFixed(4)}
+                                                </span>
+                                                <span className="text-gray-500 text-[10px]">
+                                                    Signal: {asset.macd.signal.toFixed(4)}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${asset.status === 'Undervalued'
@@ -111,15 +146,11 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                                     <polyline
                                                         points={asset.sparkline.map((p, i) => {
                                                             const x = (i / (asset.sparkline.length - 1)) * 100;
-                                                            // Invert Y because SVG 0 is top. Map 0.2-1.0 to 100-0
-                                                            // p is 0.2..1.0. We want p=0.2 -> y=100, p=1.0 -> y=0.
-                                                            // However, let's just dynamic scale standard 0..1 to 100..0
-                                                            // Our sparkline data is already min-max normalized to 0.2-1.0.
                                                             const y = 100 - (p * 100);
                                                             return `${x},${y}`;
                                                         }).join(" ")}
                                                         fill="none"
-                                                        stroke={asset.diff_percent < 0 ? "#22d3ee" : "#f87171"} // Cyan for Undervalued (Green-ish logic), Red for Overvalued
+                                                        stroke={asset.diff_percent < 0 ? "#22d3ee" : "#f87171"}
                                                         strokeWidth="2"
                                                         vectorEffect="non-scaling-stroke"
                                                         strokeLinecap="round"
@@ -128,16 +159,11 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                                 </svg>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <button className="p-2 hover:bg-white/10 rounded-lg transition-colors text-gray-400 hover:text-white">
-                                                <IconChevronRight />
-                                            </button>
-                                        </td>
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
                                         找不到符合 "{searchTerm}" 的資產
                                     </td>
                                 </tr>

@@ -1,10 +1,24 @@
 const Backtest = ({ data }) => {
+    const [selectedStrategyAsset, setSelectedStrategyAsset] = React.useState(null);
+
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in relative">
+            {/* Strategy Modal */}
+            {selectedStrategyAsset && (
+                <StrategyModal
+                    asset={selectedStrategyAsset}
+                    onClose={() => setSelectedStrategyAsset(null)}
+                />
+            )}
+
             {/* Smart Analysis Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {data && data.results.map((item) => (
-                    <div key={item.symbol} className="glass-panel p-6 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition-all">
+                    <div
+                        key={item.symbol}
+                        onClick={() => setSelectedStrategyAsset(item)}
+                        className="glass-panel p-6 rounded-2xl relative overflow-hidden group hover:border-cyan-500/30 transition-all cursor-pointer"
+                    >
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-white">

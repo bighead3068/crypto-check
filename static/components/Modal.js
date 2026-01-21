@@ -184,7 +184,7 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                                 <div className="text-xs text-gray-500">綜合動能、相關性與價值分析</div>
                             </div>
                             <div className="text-right">
-                                <div className={`text-3xl font-bold font-mono ${selectedAsset.sniper_score > 80 ? 'text-cyan-400' : selectedAsset.sniper_score > 50 ? 'text-emerald-400' : 'text-gray-400'}`}>
+                                <div className={`text-5xl font-bold font-mono ${selectedAsset.sniper_score > 80 ? 'text-cyan-400' : selectedAsset.sniper_score > 50 ? 'text-emerald-400' : 'text-gray-400'}`}>
                                     {selectedAsset.sniper_score}
                                 </div>
                             </div>

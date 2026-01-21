@@ -13,13 +13,17 @@ const PAIR_MAP = {
  * Fetches historical data for a symbol from Binance Public API (Client-Side)
  * This is generally accessible from user browsers even if cloud servers are blocked.
  */
-async function fetchHistoricalData(symbol) {
+async function fetchHistoricalData(symbol, interval = '1d') {
     const pair = PAIR_MAP[symbol];
     if (!pair) return [];
 
     try {
-        // Fetch 1 year of daily data
-        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1d&limit=365`);
+        // Fetch data based on interval
+        // 4h: recent ~2 months (360 candles)
+        // 1d: recent 1 year (365 candles)
+        // 1w: recent 3 years (156 candles)
+        const limit = interval === '1w' ? 156 : 365;
+        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=${limit}`);
         if (!response.ok) throw new Error('Network response was not ok: ' + response.statusText);
         const data = await response.json();
 
@@ -111,6 +115,7 @@ function calculateAnalysis(marketData, targetBtc) {
                 potential_upside: 0,
                 correlation: 1.0,
                 rsi: calculateRSI(history),
+                macd: calculateMACD(history),
                 volume_ratio: 1.0,
                 sparkline: history.slice(0, 30).map(d => d.close).reverse()
             });
@@ -144,6 +149,11 @@ function calculateAnalysis(marketData, targetBtc) {
         if (rsi < 30) sniperScore += 15;
         else if (rsi > 70) sniperScore -= 15;
 
+        const macdData = calculateMACD(history);
+        // MACD Scoring: Bullish crossover (MACD > Signal) = Good
+        if (macdData.macd > macdData.signal) sniperScore += 10;
+        else sniperScore -= 10;
+
         sniperScore = Math.min(100, Math.max(0, sniperScore));
 
         let status = "Balanced";
@@ -171,6 +181,7 @@ function calculateAnalysis(marketData, targetBtc) {
             potential_upside: potentialUpside,
             correlation: 0.85,
             rsi: Math.round(rsi),
+            macd: macdData,
             volume_ratio: 1.0,
             sparkline: normalizedSparkline
         });
@@ -217,6 +228,49 @@ function calculateRSI(history) {
     return 100 - (100 / (1 + rs));
 }
 
+function calculateMACD(history) {
+    // Need at least 26 + 9 periods
+    if (history.length < 35) return { macd: 0, signal: 0, histogram: 0 };
+
+    // Get close prices, newest first in 'history', but EMA calc usually needs oldest first or consistent iteration
+    // History is [newest, ..., oldest]
+    // Let's take recent 100 points and reverse to [oldest, ..., newest] for EMA calc
+    const closes = history.slice(0, 100).map(d => d.close).reverse();
+
+    const ema12 = calculateEMA(closes, 12);
+    const ema26 = calculateEMA(closes, 26);
+
+    const macdLine = [];
+    // We only care about the latest values, but we need the series for Signal Line
+    // EMA arrays are same length as closes, aligned
+    for (let i = 0; i < closes.length; i++) {
+        macdLine.push(ema12[i] - ema26[i]);
+    }
+
+    // Signal line is EMA 9 of MACD Line
+    const signalLine = calculateEMA(macdLine, 9);
+
+    const latestMACD = macdLine[macdLine.length - 1];
+    const latestSignal = signalLine[signalLine.length - 1];
+    const histogram = latestMACD - latestSignal;
+
+    return {
+        macd: latestMACD,
+        signal: latestSignal,
+        histogram: histogram
+    };
+}
+
+function calculateEMA(data, period) {
+    const k = 2 / (period + 1);
+    const emaArray = [data[0]]; // Start with SMA (or just first price for simplicity)
+    for (let i = 1; i < data.length; i++) {
+        const ema = data[i] * k + emaArray[i - 1] * (1 - k);
+        emaArray.push(ema);
+    }
+    return emaArray;
+}
+
 function generateBriefing(results, btcPrice) {
     const undervaluedCount = results.filter(r => r.status === "Undervalued").length;
     let sentiment = "中性觀望";
@@ -235,7 +289,22 @@ function generateBriefing(results, btcPrice) {
 }
 
 function formatCurrency(value) {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+    if (value === null || value === undefined) return "$0.00";
+
+    let options = { style: 'currency', currency: 'USD' };
+
+    if (value < 1.0) {
+        options.minimumFractionDigits = 6;
+        options.maximumFractionDigits = 6;
+    } else if (value < 100) {
+        options.minimumFractionDigits = 4;
+        options.maximumFractionDigits = 4;
+    } else {
+        options.minimumFractionDigits = 2;
+        options.maximumFractionDigits = 2;
+    }
+
+    return new Intl.NumberFormat('en-US', options).format(value);
 }
 
 function formatNumber(value) {
@@ -244,10 +313,192 @@ function formatNumber(value) {
 
 const formatMoney = formatCurrency;
 
+/**
+ * Fetches real-time prices for all tracked symbols.
+ * Returns a map of symbol -> price.
+ */
+async function fetchLivePrices() {
+    // Construct symbol param for Binance
+    // e.g. ["BTCUSDT","ETHUSDT"]
+    const pairs = SYMBOLS.map(s => `"${PAIR_MAP[s]}"`).join(",");
+    // Binance V3 ticker/price doesn't support comma sep lists in all endpoints, 
+    // but ticker/price?symbol=... is single. 
+    // Actually, /api/v3/ticker/price returns ALL if no symbol provided (heavy).
+    // Better to use batch or individual. 
+    // For small list (10 items), fetch all is fine (~2MB?) or just minimal.
+    // Actually /api/v3/ticker/price is light. All pairs is ~100KB.
+
+    // Better approach: Use symbol only if supported multiple. Binance API docs say symbol (string) or symbols (array of strings) for some EPs.
+    // ticker/price supports 'symbol' (one) or 'symbols' (list).
+
+    // Let's safe encode.
+    const symbolsParam = encodeURIComponent(JSON.stringify(SYMBOLS.map(s => PAIR_MAP[s])));
+
+    try {
+        const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbols=${symbolsParam}`);
+        if (!response.ok) throw new Error("Price fetch failed");
+
+        const data = await response.json();
+        // data eq: [{symbol: "BTCUSDT", price: "20000.00"}, ...]
+
+        const priceMap = {};
+        data.forEach(item => {
+            // Find our symbol key from pair map (reverse lookup or just iterate)
+            const sym = Object.keys(PAIR_MAP).find(key => PAIR_MAP[key] === item.symbol);
+            if (sym) {
+                priceMap[sym] = parseFloat(item.price);
+            }
+        });
+        return priceMap;
+    } catch (e) {
+        console.error("Live price fetch failed", e);
+        return null;
+    }
+}
+
+/**
+ * Updates the latest candle of historical data with the new live price
+ * to allow 'blinking' updates without re-fetching history.
+ */
+function updateMarketData(currentMarketData, livePrices) {
+    if (!currentMarketData || !livePrices) return currentMarketData;
+
+    const newData = { ...currentMarketData };
+    let changed = false;
+
+    Object.keys(livePrices).forEach(sym => {
+        if (newData[sym] && newData[sym].length > 0) {
+            // Clone the history array to avoid mutation if needed, 
+            // but for performance we might just mutate the head item if we are careful 
+            // or clone the head.
+
+            // Shallow clone array
+            const newHistory = [...newData[sym]];
+
+            // Get latest candle
+            const latest = { ...newHistory[0] };
+
+            // Update close price
+            latest.close = livePrices[sym];
+
+            // Update High/Low if price breaks them
+            if (latest.close > latest.high) latest.high = latest.close;
+            if (latest.close < latest.low) latest.low = latest.close;
+
+            // Replace head
+            newHistory[0] = latest;
+            newData[sym] = newHistory;
+            changed = true;
+        }
+    });
+
+    return changed ? newData : currentMarketData;
+}
+
+/**
+ * Connects to Binance WebSocket for real-time trade updates (Jumping prices).
+ * streams: <symbol>@trade
+ */
+function connectWS(onPriceUpdate, onStatusChange) {
+    if (!SYMBOLS || SYMBOLS.length === 0) return null;
+
+    // Construct stream names: lowercasepair@ticker
+    // e.g. btcusdt@ticker
+    // Note: @ticker updates every 1000ms. @trade updates every trade (too fast).
+    const streams = SYMBOLS.map(s => `${PAIR_MAP[s].toLowerCase()}@ticker`).join('/');
+    const wsUrl = `wss://stream.binance.com:9443/stream?streams=${streams}`;
+
+    console.log("Connecting to WebSocket (Ticker Stream):", wsUrl);
+    if (onStatusChange) onStatusChange("CONNECTING");
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+        try {
+            const message = JSON.parse(event.data);
+            // Ticker format: { stream: "btcusdt@ticker", data: { s: "BTCUSDT", c: "20000.00", ... } }
+            // Trade format: { ..., p: "..." }
+            // let's handle both or just ticker. Ticker uses 'c' for current close price.
+            const data = message.data;
+            if (data) {
+                const symbolPair = data.s; // e.g. BTCUSDT
+                // Ticker 'c', Trade 'p'
+                const price = parseFloat(data.c || data.p);
+
+                if (!isNaN(price)) {
+                    // Find our symbol key (BTC from BTCUSDT)
+                    const sym = Object.keys(PAIR_MAP).find(key => PAIR_MAP[key] === symbolPair);
+                    if (sym) {
+                        onPriceUpdate({ [sym]: price });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("WS Parse Error", e);
+        }
+    };
+
+    ws.onopen = () => {
+        console.log("WebSocket Connected");
+        if (onStatusChange) onStatusChange("CONNECTED");
+    };
+
+    ws.onerror = (e) => {
+        console.error("WebSocket Error:", e);
+        if (onStatusChange) onStatusChange("ERROR");
+    };
+
+    ws.onclose = () => {
+        console.log("WebSocket Closed");
+        if (onStatusChange) onStatusChange("DISCONNECTED");
+    };
+
+    return ws;
+}
 // Expose to window for App.js usage
 window.fetchHistoricalData = fetchHistoricalData;
+window.fetchLivePrices = fetchLivePrices; // Keep as fallback/initial
+window.connectWS = connectWS;
+window.updateMarketData = updateMarketData;
 window.calculateAnalysis = calculateAnalysis;
 window.SYMBOLS = SYMBOLS;
 window.formatCurrency = formatCurrency;
 window.formatMoney = formatMoney;
 window.formatNumber = formatNumber;
+
+/**
+ * Calculates Average True Range (ATR) for volatility measuring
+ */
+function calculateATR(history, period = 14) {
+    if (!history || history.length < period + 1) return 0;
+
+    // history is [newest, ..., oldest]
+    // ATR needs chronological order: [oldest, ..., newest]
+    const ChronoHistory = [...history].reverse();
+
+    let trs = [];
+    for (let i = 1; i < ChronoHistory.length; i++) {
+        const high = ChronoHistory[i].high;
+        const low = ChronoHistory[i].low;
+        const prevClose = ChronoHistory[i - 1].close;
+
+        const tr = Math.max(
+            high - low,
+            Math.abs(high - prevClose),
+            Math.abs(low - prevClose)
+        );
+        trs.push(tr);
+    }
+
+    // Initial ATR is simple average of first 'period' TRs
+    let atr = trs.slice(0, period).reduce((sum, tr) => sum + tr, 0) / period;
+
+    // Subsequent ATRs = (PrevATR * (period-1) + CurrentTR) / period
+    for (let i = period; i < trs.length; i++) {
+        atr = (atr * (period - 1) + trs[i]) / period;
+    }
+
+    return atr;
+}
+
+window.calculateATR = calculateATR;

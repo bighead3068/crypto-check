@@ -10,58 +10,99 @@ function App() {
     const [view, setView] = useState('dashboard'); // 'dashboard' | 'backtest' | 'charts'
     const [selectedAsset, setSelectedAsset] = useState(null);
 
+    const [marketData, setMarketData] = useState({}); // Keep raw data in state
+    const [wsStatus, setWsStatus] = useState("DISCONNECTED");
+    const [timeframe, setTimeframe] = useState("1d");
+
+    // Re-fetch when timeframe changes (except initial which is handled below or by this effect)
     useEffect(() => {
-        fetchAnalysis();
-        const interval = setInterval(() => {
-            fetchAnalysis(null);
-        }, 15000); // 15 seconds auto-refresh
-        return () => clearInterval(interval);
+        fetchFullHistory();
+    }, [timeframe]);
+
+    // Expose marketData to window for StrategyModal to access history
+    useEffect(() => {
+        window.marketData = marketData;
+    }, [marketData]);
+
+    useEffect(() => {
+        // WebSocket logic (unchanged)
+        let ws = null;
+
+        // WebSocket Connection for Analysis Data (Restored)
+        if (window.connectWS) {
+            ws = window.connectWS(
+                (livePrices) => {
+                    if (simulationMode) return;
+                    setMarketData(prevData => {
+                        if (!prevData || Object.keys(prevData).length === 0) return prevData;
+                        const updatedData = window.updateMarketData(prevData, livePrices);
+                        runAnalysis(updatedData);
+                        return updatedData;
+                    });
+                },
+                (status) => setWsStatus(status)
+            );
+        }
+        return () => { if (ws) ws.close(); };
     }, []);
 
-    const fetchAnalysis = async (customTarget = null) => {
-        setLoading(true);
-        try {
-            // Client-Side Fetching
-            const marketData = {};
+    // Fetches full history based on current timeframe
+    const fetchFullHistory = async () => {
+        if (!loading && simulationMode) return;
 
-            // Access globals from utils.js
+        // Only set loading if we don't have data or explicitly switching context
+        setLoading(true);
+
+        try {
             if (!window.SYMBOLS || !window.fetchHistoricalData || !window.calculateAnalysis) {
-                console.error("Utils not loaded");
-                setTimeout(() => fetchAnalysis(customTarget), 500);
+                console.warn("Utils not loaded, retrying...");
+                setTimeout(fetchFullHistory, 500);
                 return;
             }
 
             const symbols = window.SYMBOLS;
+            const newMarketData = {};
 
-            // Fetch all data concurrently
-            const promises = symbols.map(async (sym) => {
-                const history = await window.fetchHistoricalData(sym);
+            // Fetch all concurrently with timeframe
+            await Promise.all(symbols.map(async (sym) => {
+                const history = await window.fetchHistoricalData(sym, timeframe);
                 if (history && history.length > 0) {
-                    marketData[sym] = history;
+                    newMarketData[sym] = history;
                 }
-            });
+            }));
 
-            await Promise.all(promises);
-
-            // Perform Analysis
-            const result = window.calculateAnalysis(marketData, customTarget);
-
-            if (result) {
-                setData(result);
-                setTargetBtc(result.target_btc);
-                if (result.current_btc && !currentBtc) {
-                    setCurrentBtc(result.current_btc);
-                    setSimulatedPrice(result.current_btc);
-                }
-            } else {
-                console.warn("Analysis returned null (possibly missing BTC data)");
-            }
+            setMarketData(newMarketData);
+            runAnalysis(newMarketData);
 
         } catch (e) {
-            console.error("Client-Side Analysis Error:", e);
+            console.error("History Fetch Error:", e);
         } finally {
             setLoading(false);
         }
+    };
+
+    // Derived Analysis
+    const runAnalysis = (currentData, customTarget = null) => {
+        if (!currentData) return;
+
+        // Use simulation target if active and no custom passed
+        // If in simulation mode, we ignore live updates anyway in the WS callback
+
+        const result = window.calculateAnalysis(currentData, customTarget);
+        if (result) {
+            setData(result);
+            if (!simulationMode) {
+                setTargetBtc(result.target_btc);
+                setCurrentBtc(result.current_btc);
+                setSimulatedPrice(result.current_btc);
+            }
+        }
+    };
+
+    // Legacy adapter for button click "Refresh Data"
+    const fetchAnalysis = (customTarget = null) => {
+        // If user manually clicks refresh, do full history fetch
+        fetchFullHistory();
     };
 
     const handleSimulationChange = (e) => {
@@ -70,13 +111,14 @@ function App() {
 
     const applySimulation = () => {
         setSimulationMode(true);
-        fetchAnalysis(simulatedPrice);
+        // Recalculate with simulated price target
+        runAnalysis(marketData, simulatedPrice);
     };
 
     const resetSimulation = () => {
         setSimulationMode(false);
         setSimulatedPrice(currentBtc);
-        fetchAnalysis(null);
+        runAnalysis(marketData, null);
     };
 
     return (
@@ -109,14 +151,12 @@ function App() {
                             <p className="text-gray-400">
                                 {view === 'dashboard' ? '基於比特幣歷史對位模型 (BTC Correlation Model)' : view === 'charts' ? '專業級可視化圖表' : '檢視系統選用的歷史匹配日期與價格快照'}
                                 {data && view !== 'charts' && <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-xs">匹配樣本數: {data.match_count} 天</span>}
+                                <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${wsStatus === 'CONNECTED' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                                    {wsStatus === 'CONNECTED' ? '● Live' : '○ Offline'}
+                                </span>
                             </p>
                         </div>
-                        <button
-                            onClick={() => fetchAnalysis()}
-                            className="px-4 py-2 bg-white text-black hover:bg-gray-200 transaction-colors rounded-full font-medium text-sm flex items-center gap-2"
-                        >
-                            刷新數據
-                        </button>
+
                     </header>
 
                     {/* View Content */}
@@ -128,7 +168,12 @@ function App() {
                     ) : (
                         <>
                             {view === 'dashboard' && (
-                                <Dashboard data={data} setSelectedAsset={setSelectedAsset} />
+                                <Dashboard
+                                    data={data}
+                                    setSelectedAsset={setSelectedAsset}
+                                    timeframe={timeframe}
+                                    setTimeframe={setTimeframe}
+                                />
                             )}
 
                             {view === 'charts' && (
