@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import requests
+from fastapi.responses import FileResponse
 import ccxt
 import time
 from typing import Dict, List
@@ -497,79 +498,7 @@ def get_analysis(target_btc: float = None):
         "briefing": briefing
     }
 
-# ... (Previous code)
 
-# Fix: Use absolute path for robustness
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
-
-# ... (Configuration and imports)
-
-def generate_mock_data(target_btc=95000):
-    """Generates mock data when all APIs fail."""
-    mock_results = []
-    for sym in SYMBOLS:
-        if sym == "BTC":
-            mock_results.append({
-                "symbol": "BTC", "current_price": target_btc, "avg_hist_price": target_btc,
-                "diff_percent": 0, "status": "Benchmark", "sniper_score": 50,
-                "win_rate": 50, "potential_upside": 0, "correlation": 1.0, "rsi": 50, "volume_ratio": 1.0, "sparkline": []
-            })
-            continue
-            
-        mock_results.append({
-            "symbol": sym, 
-            "current_price": target_btc * 0.05, # dummy
-            "avg_hist_price": target_btc * 0.04, 
-            "diff_percent": 25.0, 
-            "status": "Undervalued" if sym in ["SOL", "ETH"] else "Balanced",
-            "sniper_score": 85 if sym in ["SOL", "ETH"] else 40,
-            "win_rate": 70, 
-            "potential_upside": 20, 
-            "correlation": 0.9, 
-            "rsi": 40, 
-            "volume_ratio": 1.2,
-            "sparkline": [0.2, 0.3, 0.5, 0.4, 0.6, 0.8, 0.9]
-        })
-    
-    return {
-        "target_btc": target_btc,
-        "current_btc": target_btc,
-        "match_count": 0,
-        "results": sorted(mock_results, key=lambda x: x["sniper_score"], reverse=True),
-        "history_matches": [],
-        "briefing": {
-            "title": "系統離線模式 (System Offline)",
-            "summary": "無法連接到外部數據源 (Binance/CoinCap)，目前顯示模擬數據。請稍後再試。",
-            "timestamp": datetime.now().strftime("%H:%M")
-        }
-    }
-
-@app.get("/api/analysis")
-def get_analysis(target_btc: float = None):
-    market_data = {}
-    
-    # Fetch data concurrently (Code omitted for brevity, assuming existing logic)
-    import concurrent.futures
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_symbol = {executor.submit(get_historical_data, sym): sym for sym in SYMBOLS}
-        for future in concurrent.futures.as_completed(future_to_symbol):
-            sym = future_to_symbol[future]
-            try:
-                data = future.result()
-                if data:
-                    market_data[sym] = data
-            except Exception as e:
-                print(f"Error processing {sym}: {e}")
-
-    # Fallback to Mock Data if BTC missing
-    if "BTC" not in market_data:
-        print("Critical Error: Failed to fetch BTC data from all sources. Serving Mock Data.")
-        return generate_mock_data(target_btc or 95000)
-
-    # ... (Rest of the analysis logic remains the same)
 
 # Serve React App
 @app.get("/")
