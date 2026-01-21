@@ -2,37 +2,66 @@
 
 const SYMBOLS = ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "DOT", "LINK", "AVAX"];
 
-const ID_MAP = {
-    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "BNB": "binance-coin",
-    "XRP": "xrp", "ADA": "cardano", "DOGE": "dogecoin", "DOT": "polkadot",
-    "LINK": "chainlink", "AVAX": "avalanche"
+// Map display symbols to Binance pairs
+const PAIR_MAP = {
+    "BTC": "BTCUSDT", "ETH": "ETHUSDT", "SOL": "SOLUSDT", "BNB": "BNBUSDT",
+    "XRP": "XRPUSDT", "ADA": "ADAUSDT", "DOGE": "DOGEUSDT", "DOT": "DOTUSDT",
+    "LINK": "LINKUSDT", "AVAX": "AVAXUSDT"
 };
 
 /**
- * Fetches historical data for a symbol from CoinCap API
+ * Fetches historical data for a symbol from Binance Public API (Client-Side)
+ * This is generally accessible from user browsers even if cloud servers are blocked.
  */
 async function fetchHistoricalData(symbol) {
-    const id = ID_MAP[symbol];
-    if (!id) return [];
+    const pair = PAIR_MAP[symbol];
+    if (!pair) return [];
 
     try {
-        const response = await fetch(`https://api.coincap.io/v2/assets/${id}/history?interval=d1`);
-        if (!response.ok) throw new Error('Network response was not ok');
-        const json = await response.json();
+        // Fetch 1 year of daily data
+        const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1d&limit=365`);
+        if (!response.ok) throw new Error('Network response was not ok: ' + response.statusText);
+        const data = await response.json();
 
-        // Transform CoinCap data format
-        return json.data.map(d => ({
-            timestamp: d.time,
-            date: new Date(d.time).toISOString().split('T')[0],
-            close: parseFloat(d.priceUsd),
-            open: parseFloat(d.priceUsd), // Approximation
-            high: parseFloat(d.priceUsd), // Approximation
-            low: parseFloat(d.priceUsd),  // Approximation
-            volume: 0
+        // Transform Binance [time, open, high, low, close, vol, ...] format
+        return data.map(candle => ({
+            timestamp: candle[0],
+            date: new Date(candle[0]).toISOString().split('T')[0],
+            open: parseFloat(candle[1]),
+            high: parseFloat(candle[2]),
+            low: parseFloat(candle[3]),
+            close: parseFloat(candle[4]),
+            volume: parseFloat(candle[5])
         })).reverse(); // Newest first
 
     } catch (error) {
-        console.error(`Failed to fetch data for ${symbol}:`, error);
+        console.warn(`Failed to fetch Binance data for ${symbol}, trying backup (CoinGecko)...`, error);
+        return await fetchCoinGeckoFallback(symbol);
+    }
+}
+
+// Fallback to CoinGecko if Binance is blocked for the user
+async function fetchCoinGeckoFallback(symbol) {
+    const idMap = {
+        "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana", "BNB": "binancecoin",
+        "XRP": "ripple", "ADA": "cardano", "DOGE": "dogecoin", "DOT": "polkadot",
+        "LINK": "chainlink", "AVAX": "avalanche-2"
+    };
+    const id = idMap[symbol];
+    if (!id) return [];
+
+    try {
+        const response = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=365`);
+        const data = await response.json();
+        return data.prices.map(p => ({
+            timestamp: p[0],
+            date: new Date(p[0]).toISOString().split('T')[0],
+            close: p[1],
+            open: p[1], high: p[1], low: p[1], // CoinGecko basic point is just price, close enough for model
+            volume: 0
+        })).reverse();
+    } catch (e) {
+        console.error("All data sources failed for " + symbol, e);
         return [];
     }
 }
@@ -191,7 +220,6 @@ function formatNumber(value) {
     return new Intl.NumberFormat('en-US').format(value);
 }
 
-// Aliases
 const formatMoney = formatCurrency;
 
 // Expose to window for App.js usage
@@ -199,5 +227,5 @@ window.fetchHistoricalData = fetchHistoricalData;
 window.calculateAnalysis = calculateAnalysis;
 window.SYMBOLS = SYMBOLS;
 window.formatCurrency = formatCurrency;
-window.formatMoney = formatMoney; // FIX: Add missing alias
+window.formatMoney = formatMoney;
 window.formatNumber = formatNumber;
