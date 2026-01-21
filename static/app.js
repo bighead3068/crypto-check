@@ -17,20 +17,45 @@ function App() {
     const fetchAnalysis = async (customTarget = null) => {
         setLoading(true);
         try {
-            let url = '/api/analysis';
-            if (customTarget) {
-                url += `?target_btc=${customTarget}`;
+            // Client-Side Fetching
+            const marketData = {};
+
+            // Access globals from utils.js
+            if (!window.SYMBOLS || !window.fetchHistoricalData || !window.calculateAnalysis) {
+                console.error("Utils not loaded");
+                // Retry after short delay if utils loading
+                setTimeout(() => fetchAnalysis(customTarget), 500);
+                return;
             }
-            const res = await fetch(url);
-            const json = await res.json();
-            setData(json);
-            setTargetBtc(json.target_btc);
-            if (json.current_btc && !currentBtc) {
-                setCurrentBtc(json.current_btc);
-                setSimulatedPrice(json.current_btc); // Initialize slider to real price
+
+            const symbols = window.SYMBOLS;
+
+            // Fetch all data concurrently
+            const promises = symbols.map(async (sym) => {
+                const history = await window.fetchHistoricalData(sym);
+                if (history && history.length > 0) {
+                    marketData[sym] = history;
+                }
+            });
+
+            await Promise.all(promises);
+
+            // Perform Analysis
+            const result = window.calculateAnalysis(marketData, customTarget);
+
+            if (result) {
+                setData(result);
+                setTargetBtc(result.target_btc);
+                if (result.current_btc && !currentBtc) {
+                    setCurrentBtc(result.current_btc);
+                    setSimulatedPrice(result.current_btc);
+                }
+            } else {
+                console.warn("Analysis returned null (possibly missing BTC data)");
             }
+
         } catch (e) {
-            console.error(e);
+            console.error("Client-Side Analysis Error:", e);
         } finally {
             setLoading(false);
         }
