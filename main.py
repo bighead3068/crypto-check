@@ -133,11 +133,19 @@ def get_analysis(target_btc: float = None):
     market_data = {}
     
     # Fetch data
-    for sym in SYMBOLS:
-        data = get_historical_data(sym)
-        if data:
-            market_data[sym] = data
-        # time.sleep(0.05) # fast fetch
+    # Fetch data concurrently using ThreadPoolExecutor
+    import concurrent.futures
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_symbol = {executor.submit(get_historical_data, sym): sym for sym in SYMBOLS}
+        for future in concurrent.futures.as_completed(future_to_symbol):
+            sym = future_to_symbol[future]
+            try:
+                data = future.result()
+                if data:
+                    market_data[sym] = data
+            except Exception as e:
+                print(f"Error processing {sym}: {e}")
         
     if "BTC" not in market_data:
         return {"error": "Failed to fetch BTC data"}
