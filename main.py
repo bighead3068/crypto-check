@@ -193,25 +193,6 @@ def generate_market_briefing(results: List[Dict], btc_price: float) -> Dict:
         "timestamp": datetime.now().strftime("%H:%M")
     }
 
-@app.get("/api/analysis")
-def get_analysis(target_btc: float = None):
-    market_data = {}
-    
-    # Fetch data
-    # Fetch data concurrently using ThreadPoolExecutor
-    import concurrent.futures
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_symbol = {executor.submit(get_historical_data, sym): sym for sym in SYMBOLS}
-        for future in concurrent.futures.as_completed(future_to_symbol):
-            sym = future_to_symbol[future]
-            try:
-                data = future.result()
-                if data:
-                    market_data[sym] = data
-            except Exception as e:
-                print(f"Error processing {sym}: {e}")
-        
 def generate_mock_data(target_btc=95000):
     """Generates mock data when all APIs fail."""
     mock_results = []
@@ -219,7 +200,8 @@ def generate_mock_data(target_btc=95000):
     for sym in SYMBOLS:
         if sym == "BTC":
             mock_results.append({
-                "symbol": "BTC", "current_price": target_btc, "avg_hist_price": target_btc,
+                "symbol": "BTC",
+                "current_price": target_btc, "avg_hist_price": target_btc,
                 "diff_percent": 0, "status": "Benchmark", "sniper_score": 50,
                 "win_rate": 50, "potential_upside": 0, "correlation": 1.0, "rsi": 50, "volume_ratio": 1.0, "sparkline": []
             })
