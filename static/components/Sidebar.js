@@ -38,6 +38,13 @@ const Sidebar = ({ view, setView, simulatedPrice, handleSimulationChange, applyS
                     <span className="font-medium">市場儀表板</span>
                 </div>
                 <div
+                    onClick={() => setView('charts')}
+                    className={`nav-item px-3 py-2 rounded-md flex items-center gap-3 cursor-pointer transition-all hover:bg-white/5 ${view === 'charts' ? 'active' : 'opacity-60'}`}
+                >
+                    <IconActivity />
+                    <span className="font-medium">TradingView 行情</span>
+                </div>
+                <div
                     onClick={() => setView('backtest')}
                     className={`nav-item px-3 py-2 rounded-md flex items-center gap-3 cursor-pointer transition-all hover:bg-white/5 ${view === 'backtest' ? 'active' : 'opacity-60'}`}
                 >

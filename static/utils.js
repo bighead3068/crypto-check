@@ -183,10 +183,22 @@ function calculateAnalysis(marketData, targetBtc) {
         current_btc: currentBtc,
         match_count: matchedIndices.length,
         results: results,
-        history_matches: matchedIndices.slice(0, 50).map(i => ({
-            date: btcHistory[i].date,
-            price: btcHistory[i].close
-        })),
+        history_matches: matchedIndices.slice(0, 50).map(i => {
+            const date = btcHistory[i].date;
+            const assets = {};
+            SYMBOLS.forEach(sym => {
+                if (sym === "BTC") return;
+                if (marketData[sym]) {
+                    const candle = marketData[sym].find(c => c.date === date);
+                    if (candle) assets[sym] = candle.close;
+                }
+            });
+            return {
+                date: date,
+                btc_price: btcHistory[i].close,
+                assets: assets
+            };
+        }),
         briefing: generateBriefing(results, currentBtc)
     };
 }

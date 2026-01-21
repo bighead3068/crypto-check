@@ -105,10 +105,29 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
     const fetchHistory = async (symbol) => {
         setLoading(true);
         try {
-            const res = await fetch(`/api/history/${symbol}`);
-            const json = await res.json();
-            if (json.candlestick) {
-                setChartData(json);
+            // Use client-side fetcher instead of missing backend API
+            if (window.fetchHistoricalData) {
+                const history = await window.fetchHistoricalData(symbol);
+                if (history && history.length > 0) {
+                    // Format for Lightweight Charts (needs {time, open, high, low, close})
+                    const candlestick = history.map(h => ({
+                        time: h.date, // 'yyyy-mm-dd'
+                        open: h.open,
+                        high: h.high,
+                        low: h.low,
+                        close: h.close
+                    })).sort((a, b) => new Date(a.time) - new Date(b.time)); // Ensure ascending order
+
+                    const volume = history.map(h => ({
+                        time: h.date,
+                        value: h.volume,
+                        color: h.close >= h.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)'
+                    })).sort((a, b) => new Date(a.time) - new Date(b.time));
+
+                    setChartData({ candlestick, volume });
+                }
+            } else {
+                console.error("fetchHistoricalData not found in window");
             }
         } catch (e) {
             console.error("Failed to load chart data", e);

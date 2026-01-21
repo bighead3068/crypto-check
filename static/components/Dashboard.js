@@ -106,14 +106,26 @@ const Dashboard = ({ data, setSelectedAsset }) => {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 w-32">
-                                            <div className="h-8 flex items-end gap-0.5 opacity-50 group-hover:opacity-100 transition-opacity">
-                                                {asset.sparkline.map((p, i) => (
-                                                    <div
-                                                        key={i}
-                                                        className={`w-1 rounded-t-sm ${asset.diff_percent < 0 ? 'bg-cyan-400' : 'bg-red-400'}`}
-                                                        style={{ height: `${p * 100}%` }}
-                                                    ></div>
-                                                ))}
+                                            <div className="h-8 w-32 flex items-center pr-4">
+                                                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                                    <polyline
+                                                        points={asset.sparkline.map((p, i) => {
+                                                            const x = (i / (asset.sparkline.length - 1)) * 100;
+                                                            // Invert Y because SVG 0 is top. Map 0.2-1.0 to 100-0
+                                                            // p is 0.2..1.0. We want p=0.2 -> y=100, p=1.0 -> y=0.
+                                                            // However, let's just dynamic scale standard 0..1 to 100..0
+                                                            // Our sparkline data is already min-max normalized to 0.2-1.0.
+                                                            const y = 100 - (p * 100);
+                                                            return `${x},${y}`;
+                                                        }).join(" ")}
+                                                        fill="none"
+                                                        stroke={asset.diff_percent < 0 ? "#22d3ee" : "#f87171"} // Cyan for Undervalued (Green-ish logic), Red for Overvalued
+                                                        strokeWidth="2"
+                                                        vectorEffect="non-scaling-stroke"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                    />
+                                                </svg>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
