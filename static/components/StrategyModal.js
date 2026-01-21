@@ -94,7 +94,14 @@ const StrategyModal = ({ asset, onClose }) => {
                                 </div>
 
                                 <div className="mt-6 pt-4 border-t border-white/5">
-                                    <button className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold rounded-lg transition-all shadow-lg shadow-cyan-500/20">
+                                    <button
+                                        onClick={() => {
+                                            if (window.showToast) {
+                                                window.showToast(`Strategy "${strat.name}" Applied Successfully!`, 'success');
+                                            }
+                                            setTimeout(onClose, 1500);
+                                        }}
+                                        className="w-full py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold rounded-lg transition-all shadow-lg shadow-cyan-500/20 active:scale-95">
                                         套用此策略
                                     </button>
                                 </div>

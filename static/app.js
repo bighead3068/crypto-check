@@ -14,6 +14,17 @@ function App() {
     const [wsStatus, setWsStatus] = useState("DISCONNECTED");
     const [timeframe, setTimeframe] = useState("1d");
 
+    // Toast State
+    const [toast, setToast] = useState(null); // { message, type }
+
+    // Expose showToast globally
+    useEffect(() => {
+        window.showToast = (message, type = 'success') => {
+            setToast({ message, type });
+            setTimeout(() => setToast(null), 3000);
+        };
+    }, []);
+
     // Re-fetch when timeframe changes (except initial which is handled below or by this effect)
     useEffect(() => {
         fetchFullHistory();
@@ -142,6 +153,21 @@ function App() {
                 <div className="absolute bottom-[-10%] right-[10%] w-[400px] h-[400px] bg-purple-500/10 rounded-full blur-[128px] pointer-events-none"></div>
 
                 <div className="p-8 max-w-7xl mx-auto relative z-10">
+                    {/* Toast Notification */}
+                    {toast && (
+                        <div className="fixed top-8 right-8 z-50 animate-fade-in-down">
+                            <div className={`glass-panel px-6 py-4 rounded-xl border flex items-center gap-3 shadow-2xl ${toast.type === 'success' ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-blue-500/30 bg-blue-500/10 text-blue-400'
+                                }`}>
+                                {toast.type === 'success' ? (
+                                    <i data-lucide="check-circle" className="w-5 h-5"></i>
+                                ) : (
+                                    <i data-lucide="info" className="w-5 h-5"></i>
+                                )}
+                                <span className="font-bold">{toast.message}</span>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Header */}
                     <header className="flex justify-between items-end mb-8">
                         <div>
