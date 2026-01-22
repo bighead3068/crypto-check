@@ -296,6 +296,38 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                             )}
                         </div>
 
+                        {showKeyInput && (
+                            <div className="p-6 rounded-xl bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 text-center animate-fade-in-up">
+                                <IconCpu className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
+                                <h4 className="text-white font-bold mb-2">啟用網頁版 AI 功能</h4>
+                                <p className="text-gray-300 text-xs mb-4">
+                                    由於 GitHub Pages 是靜態網站，請輸入您的 Gemini API Key 以直接連線 Google 伺服器。<br />
+                                    <span className="opacity-50">(Key 僅儲存於您的瀏覽器，不會上傳)</span>
+                                </p>
+                                <input
+                                    type="password"
+                                    value={userApiKey}
+                                    onChange={(e) => setUserApiKey(e.target.value)}
+                                    placeholder="貼上 API Key (AIza...)"
+                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm mb-3 focus:border-indigo-500 outline-none"
+                                />
+                                <div className="flex gap-2 justify-center">
+                                    <button
+                                        onClick={() => setShowKeyInput(false)}
+                                        className="px-4 py-2 bg-white/10 hover:bg-white/20 text-gray-300 text-sm rounded-lg"
+                                    >
+                                        取消
+                                    </button>
+                                    <button
+                                        onClick={saveKeyAndRetry}
+                                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold rounded-lg shadow-lg"
+                                    >
+                                        儲存並分析
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {analyzing && (
                             <div className="p-8 rounded-xl bg-white/5 border border-white/10 text-center animate-pulse">
                                 <div className="text-cyan-400 font-mono text-sm mb-2">AI 正在解讀市場數據...</div>
