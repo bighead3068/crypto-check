@@ -140,8 +140,51 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
     };
 
     const [error, setError] = React.useState(null);
+    const [showKeyInput, setShowKeyInput] = React.useState(false);
+    const [userApiKey, setUserApiKey] = React.useState(localStorage.getItem("GEMINI_USER_KEY") || "");
 
-    const runAIAnalysis = async (mode = "auto") => {
+    const saveKeyAndRetry = () => {
+        if (!userApiKey.trim()) return;
+        localStorage.setItem("GEMINI_USER_KEY", userApiKey.trim());
+        setShowKeyInput(false);
+        runAIAnalysis("ai", true); // Retry with direct client mode
+    };
+
+    const runDirectClientAI = async (payload) => {
+        const key = localStorage.getItem("GEMINI_USER_KEY");
+        if (!key) {
+            setShowKeyInput(true);
+            throw new Error("請輸入 API Key 以在網頁版啟用 AI 功能");
+        }
+
+        const prompt = `You are a crypto analyst. Analyze this asset: ${payload.symbol}, Price: ${payload.price}, RSI: ${payload.rsi}, MACD: ${payload.macd_signal}, Val Gap: ${payload.diff_percent}%. Response JSON ONLY: {title, summary, support_resistance, action, confidence(0-100)}. Use Traditional Chinese.`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { response_mime_type: "application/json" }
+            })
+        });
+
+        if (!response.ok) {
+            if (response.status === 400 || response.status === 403) {
+                localStorage.removeItem("GEMINI_USER_KEY"); // Clear invalid key
+                setShowKeyInput(true);
+                throw new Error("API Key 無效或過期，請重新輸入");
+            }
+            throw new Error(`Google API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+        const parsed = JSON.parse(text);
+        parsed.source = "AI (Web-Client Mode)";
+        return parsed;
+    };
+
+    const runAIAnalysis = async (mode = "auto", forceClient = false) => {
         if (!selectedAsset) return;
         setAnalysis(null);
         setError(null);
@@ -159,6 +202,15 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                 mode: mode
             };
 
+            // Force client mode if on GitHub Pages or if backend failed previously
+            const isStaticSite = window.location.hostname.includes("github.io");
+
+            if (forceClient || isStaticSite) {
+                const result = await runDirectClientAI(payload);
+                setAnalysis(result);
+                return;
+            }
+
             const response = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -166,6 +218,13 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
             });
 
             if (!response.ok) {
+                // If backend 404s (e.g. static site) or fails, try client-side fallback
+                if (response.status === 404 || response.status === 405) {
+                    console.warn("Backend missing, switching to Client-Side AI...");
+                    const result = await runDirectClientAI(payload);
+                    setAnalysis(result);
+                    return;
+                }
                 const errData = await response.json().catch(() => ({}));
                 throw new Error(errData.detail || "AI 分析服務暫時無法使用");
             }
