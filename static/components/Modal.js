@@ -159,29 +159,54 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
 
         const prompt = `You are a crypto analyst. Analyze this asset: ${payload.symbol}, Price: ${payload.price}, RSI: ${payload.rsi}, MACD: ${payload.macd_signal}, Val Gap: ${payload.diff_percent}%. Response JSON ONLY: {title, summary, support_resistance, action, confidence(0-100)}. Use Traditional Chinese.`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { response_mime_type: "application/json" }
-            })
-        });
+        // Retry strategy: Try newer models first, fall back to stable ones
+        const models = [
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro"
+        ];
 
-        if (!response.ok) {
-            if (response.status === 400 || response.status === 403) {
-                localStorage.removeItem("GEMINI_USER_KEY"); // Clear invalid key
-                setShowKeyInput(true);
-                throw new Error("API Key 無效或過期，請重新輸入");
+        let lastError = null;
+
+        for (const model of models) {
+            try {
+                // console.log(`Trying model: ${model}`);
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { response_mime_type: "application/json" }
+                    })
+                });
+
+                if (!response.ok) {
+                    if (response.status === 400 || response.status === 403) {
+                        localStorage.removeItem("GEMINI_USER_KEY");
+                        setShowKeyInput(true);
+                        throw new Error("API Key 無效或過期，請重新輸入");
+                    }
+                    // For 503 or 404, throw to trigger fallback to next model
+                    const errDetail = await response.text();
+                    throw new Error(`Model ${model} failed with ${response.status}: ${errDetail}`);
+                }
+
+                const data = await response.json();
+                const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+                const parsed = JSON.parse(text);
+                parsed.source = `AI (${model} / Client)`;
+                return parsed;
+
+            } catch (e) {
+                console.warn(`Attempt with ${model} failed:`, e);
+                lastError = e;
+                // If it's an Auth error, stop immediately, don't retry others
+                if (e.message.includes("Key 無效")) throw e;
             }
-            throw new Error(`Google API Error: ${response.status}`);
         }
 
-        const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
-        const parsed = JSON.parse(text);
-        parsed.source = "AI (Web-Client Mode)";
-        return parsed;
+        throw new Error(lastError?.message || "所有 AI 模型皆暫時無法使用，請稍後再試");
     };
 
     const runAIAnalysis = async (mode = "auto", forceClient = false) => {
@@ -306,7 +331,7 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                                 {selectedAsset.rsi > 70 && <span className="px-2 py-1 rounded text-xs bg-rose-500/20 text-rose-400 font-bold">超買區</span>}
                             </div>
                         </div>
-                        {/* Other stats as before... keeping it DRY for this response, assuming user wants full file replaced, I will include them */}
+
                         <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                             <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">量能 (Volume)</div>
                             <div className="flex items-center justify-between">
