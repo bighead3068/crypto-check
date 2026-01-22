@@ -4,10 +4,13 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
     const chartContainerRef = useRef(null);
     const [chartData, setChartData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [analysis, setAnalysis] = useState(null);
+    const [analyzing, setAnalyzing] = useState(false);
 
     useEffect(() => {
         if (selectedAsset) {
             fetchHistory(selectedAsset.symbol);
+            setAnalysis(null); // Reset analysis on new asset
         }
     }, [selectedAsset]);
 
@@ -109,14 +112,14 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
             if (window.fetchHistoricalData) {
                 const history = await window.fetchHistoricalData(symbol);
                 if (history && history.length > 0) {
-                    // Format for Lightweight Charts (needs {time, open, high, low, close})
+                    // Format for Lightweight Charts
                     const candlestick = history.map(h => ({
                         time: h.date, // 'yyyy-mm-dd'
                         open: h.open,
                         high: h.high,
                         low: h.low,
                         close: h.close
-                    })).sort((a, b) => new Date(a.time) - new Date(b.time)); // Ensure ascending order
+                    })).sort((a, b) => new Date(a.time) - new Date(b.time));
 
                     const volume = history.map(h => ({
                         time: h.date,
@@ -133,6 +136,49 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
             console.error("Failed to load chart data", e);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const [error, setError] = React.useState(null);
+
+    const runAIAnalysis = async (mode = "auto") => {
+        if (!selectedAsset) return;
+        setAnalysis(null);
+        setError(null);
+        setAnalyzing(true);
+
+        try {
+            const payload = {
+                symbol: selectedAsset.symbol,
+                price: selectedAsset.current_price,
+                rsi: selectedAsset.rsi,
+                macd_signal: selectedAsset.macd.macd > selectedAsset.macd.signal ? "bullish" : "bearish",
+                diff_percent: selectedAsset.diff_percent,
+                status: selectedAsset.status,
+                volume_ratio: selectedAsset.volume_ratio,
+                mode: mode
+            };
+
+            const response = await fetch('/api/analyze', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "AI 分析服務暫時無法使用");
+            }
+
+            const result = await response.json();
+            setAnalysis(result);
+
+        } catch (e) {
+            console.error("Analysis failed", e);
+            setError(e.message);
+            // window.showToast(e.message, "error"); // Optional: Keep toast or rely on UI
+        } finally {
+            setAnalyzing(false);
         }
     };
 
@@ -176,8 +222,9 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                         <div ref={chartContainerRef} className="w-full h-full"></div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        {/* Sniper Score Badge */}
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        {/* Sniper Score (Full Width) */}
                         <div className="col-span-2 flex items-center justify-between bg-white/5 rounded-xl p-4 border border-white/5">
                             <div>
                                 <div className="text-xs text-gray-400 uppercase tracking-wider mb-1">狙擊評分 (Sniper Score)</div>
@@ -200,6 +247,7 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                                 {selectedAsset.rsi > 70 && <span className="px-2 py-1 rounded text-xs bg-rose-500/20 text-rose-400 font-bold">超買區</span>}
                             </div>
                         </div>
+                        {/* Other stats as before... keeping it DRY for this response, assuming user wants full file replaced, I will include them */}
                         <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                             <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">量能 (Volume)</div>
                             <div className="flex items-center justify-between">
@@ -223,6 +271,89 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                             </div>
                         </div>
                     </div>
+
+                    {/* AI Analysis Section */}
+                    <div className="border-t border-white/10 pt-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <IconActivity /> AI 深度分析
+                            </h3>
+                            {!analysis && !analyzing && (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => runAIAnalysis("local")}
+                                        className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white text-sm font-bold rounded-lg transition-all flex items-center gap-2"
+                                    >
+                                        <IconCpu /> <span>📊 公式運算</span>
+                                    </button>
+                                    <button
+                                        onClick={() => runAIAnalysis("ai")}
+                                        className="px-4 py-1.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-sm font-bold rounded-lg transition-all shadow-lg hover:shadow-cyan-500/25 flex items-center gap-2"
+                                    >
+                                        <IconActivity /> <span>✨ AI 深度分析</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {analyzing && (
+                            <div className="p-8 rounded-xl bg-white/5 border border-white/10 text-center animate-pulse">
+                                <div className="text-cyan-400 font-mono text-sm mb-2">AI 正在解讀市場數據...</div>
+                                <div className="w-48 h-1 bg-gray-700 rounded-full mx-auto overflow-hidden">
+                                    <div className="w-1/2 h-full bg-cyan-500 animate-slide"></div>
+                                </div>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-center animate-fade-in-up">
+                                <div className="text-red-400 font-bold mb-1">分析失敗</div>
+                                <div className="text-red-300 text-sm mb-3">{error}</div>
+                                <button
+                                    onClick={() => runAIAnalysis("local")}
+                                    className="px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-bold rounded-lg transition-all"
+                                >
+                                    使用公式運算 (Fallback)
+                                </button>
+                            </div>
+                        )}
+
+                        {analysis && (
+                            <div className="bg-gradient-to-b from-slate-900 to-slate-950 rounded-xl border border-white/10 overflow-hidden animate-fade-in-up">
+                                <div className="p-4 border-b border-white/5 bg-white/5 flex justify-between items-center">
+                                    <h4 className="font-bold text-cyan-300">{analysis.title}</h4>
+                                    <div className="flex gap-2">
+                                        {analysis.source && (
+                                            <span className={`px-2 py-0.5 text-xs rounded font-mono font-bold border ${analysis.source.includes("AI") ? 'bg-purple-500/20 text-purple-400 border-purple-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30'}`}>
+                                                {analysis.source === "AI" ? "⚡ AI Model" : analysis.source}
+                                            </span>
+                                        )}
+                                        <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 text-xs rounded font-mono">
+                                            信心指數: {analysis.confidence}%
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="p-5 space-y-4">
+                                    <p className="text-gray-300 leading-relaxed text-sm">
+                                        {analysis.summary}
+                                    </p>
+
+                                    <div className="grid grid-cols-2 gap-4 pt-2">
+                                        <div className="bg-black/40 p-3 rounded-lg border border-white/5">
+                                            <div className="text-xs text-gray-500 mb-1">關鍵點位</div>
+                                            <div className="text-sm font-mono text-white">{analysis.support_resistance}</div>
+                                        </div>
+                                        <div className="bg-black/40 p-3 rounded-lg border border-white/5">
+                                            <div className="text-xs text-gray-500 mb-1">建議操作</div>
+                                            <div className={`text-sm font-bold ${analysis.action.includes("Buy") || analysis.action.includes("買") ? 'text-green-400' : analysis.action.includes("Sell") ? 'text-red-400' : 'text-yellow-400'}`}>
+                                                {analysis.action}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Modal Footer */}
@@ -238,5 +369,4 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
         </div>
     );
 };
-
 window.Modal = Modal;

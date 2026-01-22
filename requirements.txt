@@ -3,3 +3,4 @@ uvicorn
 requests
 aiofiles
 python-multipart
+python-dotenv
