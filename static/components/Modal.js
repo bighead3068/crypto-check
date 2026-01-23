@@ -292,15 +292,17 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
             });
 
             if (!response.ok) {
-                // If backend 404s (e.g. static site) or fails, try client-side fallback
-                if (response.status === 404 || response.status === 405) {
-                    console.warn("Backend missing, switching to Client-Side AI...");
+                // If backend fails for ANY reason (404, 405, 500, etc), try client-side fallback
+                console.warn(`Backend failed (${response.status}), switching to Client-Side AI...`);
+                try {
                     const result = await runDirectClientAI(payload);
                     setAnalysis(result);
                     return;
+                } catch (clientError) {
+                    console.error("Client fallback also failed:", clientError);
+                    // If client also fails, throw the client error (more useful potentially)
+                    throw clientError;
                 }
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.detail || "AI 分析服務暫時無法使用");
             }
 
             const result = await response.json();
