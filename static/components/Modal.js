@@ -143,6 +143,47 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
     const [showKeyInput, setShowKeyInput] = React.useState(false);
     const [userApiKey, setUserApiKey] = React.useState(localStorage.getItem("GEMINI_USER_KEY") || "");
 
+    // Cache models to avoid repeated API calls
+    const [cachedModels, setCachedModels] = useState(null);
+
+    const getAvailableModels = async (key) => {
+        if (cachedModels) return cachedModels;
+
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+            if (!response.ok) return null;
+
+            const data = await response.json();
+            if (!data.models) return null;
+
+            // Filter for models that support 'generateContent'
+            const validModels = data.models
+                .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+                .map(m => m.name.replace("models/", ""));
+
+            // Sort strategy: 2.x > 1.5 > 1.0 > pro > flash
+            const sorted = validModels.sort((a, b) => {
+                const getScore = (name) => {
+                    let score = 0;
+                    if (name.includes("gemini-2")) score += 30;
+                    if (name.includes("gemini-1.5")) score += 20;
+                    if (name.includes("gemini-1.0") || name.includes("gemini-pro")) score += 10;
+                    if (name.includes("flash")) score += 5; // Prefer Flash for speed
+                    return score;
+                };
+                return getScore(b) - getScore(a);
+            });
+
+            console.log("Discovered models:", sorted);
+            setCachedModels(sorted);
+            return sorted;
+        } catch (e) {
+            console.warn("Failed to discover models:", e);
+            return null;
+        }
+    };
+
+
     const saveKeyAndRetry = () => {
         if (!userApiKey.trim()) return;
         localStorage.setItem("GEMINI_USER_KEY", userApiKey.trim());
@@ -159,13 +200,19 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
 
         const prompt = `You are a crypto analyst. Analyze this asset: ${payload.symbol}, Price: ${payload.price}, RSI: ${payload.rsi}, MACD: ${payload.macd_signal}, Val Gap: ${payload.diff_percent}%. Response JSON ONLY: {title, summary, support_resistance, action, confidence(0-100)}. Use Traditional Chinese.`;
 
-        // Retry strategy: Try newer models first, fall back to stable ones
-        const models = [
-            "gemini-2.5-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro"
-        ];
+        // Smart Model Discovery
+        let models = await getAvailableModels(key);
+
+        // Fallback hardcoded list if discovery fails
+        if (!models || models.length === 0) {
+            console.warn("Model discovery failed, using fallback list");
+            models = [
+                "gemini-2.0-flash",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro",
+                "gemini-pro"
+            ];
+        }
 
         let lastError = null;
 
@@ -183,11 +230,14 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
 
                 if (!response.ok) {
                     if (response.status === 400 || response.status === 403) {
-                        localStorage.removeItem("GEMINI_USER_KEY");
-                        setShowKeyInput(true);
-                        throw new Error("API Key 無效或過期，請重新輸入");
+                        const errText = await response.text();
+                        // Only clear key if it's explicitly an API key error
+                        if (errText.includes("API key")) {
+                            localStorage.removeItem("GEMINI_USER_KEY");
+                            setShowKeyInput(true);
+                            throw new Error("API Key 無效或過期，請重新輸入");
+                        }
                     }
-                    // For 503 or 404, throw to trigger fallback to next model
                     const errDetail = await response.text();
                     throw new Error(`Model ${model} failed with ${response.status}: ${errDetail}`);
                 }
@@ -195,13 +245,12 @@ const Modal = ({ selectedAsset, setSelectedAsset }) => {
                 const data = await response.json();
                 const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
                 const parsed = JSON.parse(text);
-                parsed.source = `AI (${model} / Client)`;
+                parsed.source = `AI (${model})`;
                 return parsed;
 
             } catch (e) {
                 console.warn(`Attempt with ${model} failed:`, e);
                 lastError = e;
-                // If it's an Auth error, stop immediately, don't retry others
                 if (e.message.includes("Key 無效")) throw e;
             }
         }
